@@ -86,6 +86,85 @@ let MESSAGES = {
         },
     ],
 };
+const userRoles = ["spectator", "user", "moderator", "admin"];
+let USERS = [
+    {
+        id: 0,
+        role: userRoles[3],
+        tempRole: null,
+        login: "a",
+        name: "jack",
+        surname: "brown",
+        email: "124qqqqqqvcbv@ya.ru",
+        password: "1",
+        location: "Russia",
+        occupation: "",
+        rating: {
+            disputesWin: 5,
+            disputesLose: 2,
+            ratio() {
+                return this.disputesWin / this.disputesLose;
+            },
+        },
+    },
+    {
+        id: 1,
+        role: userRoles[1],
+        tempRole: null,
+        login: "user",
+        name: "sergey",
+        surname: "fedunov",
+        email: "testtestsvcbv@ya.ru",
+        password: "1",
+        location: "Russia",
+        occupation: "enterpreneur",
+        rating: {
+            disputesWin: 5,
+            disputesLose: 2,
+            ratio() {
+                return this.disputesWin / this.disputesLose;
+            },
+        },
+    },
+    {
+        id: 2,
+        role: userRoles[0],
+        tempRole: "",
+        login: "spec",
+        password: "1",
+        name: "Masha",
+        surname: "Ivanova",
+        email: "mashzxvnwgwe@ya.ru",
+        location: "Kazakhstan",
+        occupation: "baker",
+        rating: {
+            disputesWin: 0,
+            disputesLose: 0,
+            ratio() {
+                return this.disputesWin / this.disputesLose;
+            },
+        },
+    },
+];
+// USERS
+app.post("/users/:id", (req, res) => {
+    const userId = req.params.id;
+    const userPassword = req.body.password;
+    const user = USERS.filter((el) => {
+        const compareLogin = userId.toString().toLowerCase();
+        if (el.email.toString().toLowerCase() === compareLogin ||
+            el.login.toString().toLowerCase() === compareLogin)
+            return el;
+    });
+    console.log(user);
+    if (user[0] && user[0].password === userPassword) {
+        res.status(200).send("Success!");
+    }
+    else {
+        res.status(401).send("Invalid Request");
+    }
+});
+// MESSAGES
 app.get("/messages/:target", (req, res) => {
     const fetchTarget = req.params.target;
     res.status(200).json(MESSAGES[fetchTarget]);

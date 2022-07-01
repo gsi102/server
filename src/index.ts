@@ -2,13 +2,17 @@ import express from "express";
 import path, { resolve } from "path";
 import cors from "cors";
 import { userInfo } from "os";
+import cookieParser from "cookie-parser";
 
 const app = express();
 const port = process.env.PORT ?? 3003;
 
 app.use(express.json());
-// Vulnerability?
-app.use(cors());
+// Only for DEV.
+app.use(cors({ credentials: true, origin: true }));
+
+// COOKIES
+app.use(cookieParser());
 
 let MESSAGES = {
   DISPUTE: [
@@ -60,6 +64,7 @@ let MESSAGES = {
       name: "spec1",
       text: "specmessage - 1",
       deletedText: "",
+      likes: null,
     },
     {
       dateFull: "Thu Jun 24 2022 18:30:37 GMT+0300 (Москва, стандартное время)",
@@ -71,6 +76,7 @@ let MESSAGES = {
       name: "spec2",
       text: "specmessage - 2",
       deletedText: "",
+      likes: null,
     },
     {
       dateFull: "Thu Jun 24 2022 18:40:37 GMT+0300 (Москва, стандартное время)",
@@ -82,6 +88,7 @@ let MESSAGES = {
       name: "spec3",
       text: "specmessage - 3",
       deletedText: "",
+      likes: null,
     },
   ],
 };
@@ -161,13 +168,40 @@ app.post("/users/:id", (req, res) => {
       return el;
   });
 
-  console.log(user);
-
   if (user[0] && user[0].password === userPassword) {
-    res.status(200).send("Success!");
+    res.status(200).send(USERS);
   } else {
-    res.status(401).send("Invalid Request");
+    res.status(401).send(USERS);
   }
+});
+
+app.post("/sign-up", (req, res) => {
+  //сделать деструктуризацию
+  const userData = req.body;
+
+  const newUser = {
+    id: USERS.length + 1,
+    role: userRoles[1],
+    tempRole: "",
+    login: userData.login,
+    password: userData.password,
+    name: "",
+    surname: "",
+    email: userData.email,
+    location: "",
+    occupation: "",
+    rating: {
+      disputesWin: 0,
+      disputesLose: 0,
+      ratio() {
+        return this.disputesWin / this.disputesLose;
+      },
+    },
+  };
+
+  USERS.push(newUser);
+
+  res.status(200).send(USERS);
 });
 
 // MESSAGES
@@ -207,7 +241,7 @@ app.patch("/messages/:target/:id", (req, res) => {
       break;
     case "like":
       {
-        element.likes++;
+        element.likes !== null ? ++element.likes : "";
       }
       break;
     default:
@@ -217,11 +251,6 @@ app.patch("/messages/:target/:id", (req, res) => {
   res.status(200).json(MESSAGES[patchTarget as keyof typeof MESSAGES]);
 });
 
-// app.use(express.static(path.resolve(__dirname, "/messages")));
-// app.get("*", (req, res) => {
-//   res.sendFile(path.resolve(__dirname, "dist", "index.js"));
-// });
-
 app.listen(port, () => {
-  console.log(`Example app listening to port: ${port}`);
+  console.log(`Port: ${port}`);
 });

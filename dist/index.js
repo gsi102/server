@@ -6,14 +6,16 @@ var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-const cookie_parser_1 = __importDefault(require("cookie-parser"));
+const mysql_1 = __importDefault(require("mysql"));
+const createNewUser_1 = __importDefault(require("./createNewUser"));
+const createNewMessage_1 = __importDefault(require("./createNewMessage"));
 const app = (0, express_1.default)();
 const port = (_a = process.env.PORT) !== null && _a !== void 0 ? _a : 3003;
 app.use(express_1.default.json());
 // Only for DEV.
 app.use((0, cors_1.default)({ credentials: true, origin: true }));
 // COOKIES
-app.use((0, cookie_parser_1.default)());
+// app.use(cookieParser());
 let MESSAGES = {
     DISPUTE: [
         {
@@ -92,119 +94,110 @@ let MESSAGES = {
         },
     ],
 };
-const userRoles = ["spectator", "user", "moderator", "admin"];
-let USERS = [
-    {
-        id: 0,
-        role: userRoles[3],
-        tempRole: null,
-        login: "a",
-        name: "jack",
-        surname: "brown",
-        email: "124qqqqqqvcbv@ya.ru",
-        password: "1",
-        location: "Russia",
-        occupation: "",
-        rating: {
-            disputesWin: 5,
-            disputesLose: 2,
-            ratio() {
-                return this.disputesWin / this.disputesLose;
-            },
-        },
-    },
-    {
-        id: 1,
-        role: userRoles[1],
-        tempRole: null,
-        login: "user",
-        name: "sergey",
-        surname: "fedunov",
-        email: "testtestsvcbv@ya.ru",
-        password: "1",
-        location: "Russia",
-        occupation: "enterpreneur",
-        rating: {
-            disputesWin: 5,
-            disputesLose: 2,
-            ratio() {
-                return this.disputesWin / this.disputesLose;
-            },
-        },
-    },
-    {
-        id: 2,
-        role: userRoles[0],
-        tempRole: "",
-        login: "spec",
-        password: "1",
-        name: "Masha",
-        surname: "Ivanova",
-        email: "mashzxvnwgwe@ya.ru",
-        location: "Kazakhstan",
-        occupation: "baker",
-        rating: {
-            disputesWin: 0,
-            disputesLose: 0,
-            ratio() {
-                return this.disputesWin / this.disputesLose;
-            },
-        },
-    },
-];
+const poolConnectionDB = mysql_1.default.createPool({
+    connectionLimit: 10,
+    host: "91.236.136.231",
+    user: "u170175_admin",
+    password: "admin323",
+    database: "u170175_db",
+});
 // USERS
-app.post("/users/:id", (req, res) => {
-    const userId = req.params.id;
-    const userPassword = req.body.password;
-    const user = USERS.filter((el) => {
-        const compareLogin = userId.toString().toLowerCase();
-        if (el.email.toString().toLowerCase() === compareLogin ||
-            el.login.toString().toLowerCase() === compareLogin)
-            return el;
+app.post("/sign-in", (req, res) => {
+    const [userLogin, userPassword] = [req.body.login, req.body.password];
+    const compareLogin = userLogin.toString().toLowerCase();
+    poolConnectionDB.getConnection((err, connection) => {
+        if (err)
+            console.log(err);
+        connection.query(`SELECT * FROM users WHERE login = ?`, compareLogin, (err2, response) => {
+            if (err2)
+                console.log(err2);
+            if (response.length === 1) {
+                const compareUser = response[0];
+                const sendUser = Object.assign({}, compareUser);
+                // Prevent sending password in response
+                delete sendUser.password;
+                userPassword === compareUser.password
+                    ? res.status(200).send(sendUser)
+                    : res.status(401).send(compareUser);
+            }
+            else
+                res.status(401).send("user not found");
+            connection.release();
+        });
     });
-    if (user[0] && user[0].password === userPassword) {
-        res.status(200).send(USERS);
-    }
-    else {
-        res.status(401).send(USERS);
-    }
 });
 app.post("/sign-up", (req, res) => {
-    //сделать деструктуризацию
     const userData = req.body;
-    const newUser = {
-        id: USERS.length + 1,
-        role: userRoles[1],
-        tempRole: "",
-        login: userData.login,
-        password: userData.password,
-        name: "",
-        surname: "",
-        email: userData.email,
-        location: "",
-        occupation: "",
-        rating: {
-            disputesWin: 0,
-            disputesLose: 0,
-            ratio() {
-                return this.disputesWin / this.disputesLose;
-            },
-        },
-    };
-    USERS.push(newUser);
-    res.status(200).send(USERS);
+    const { id, role, tempRole, login, name, surname, email, password, location, occupation, rating: { disputesWin, disputesLose, disputesRatio }, } = (0, createNewUser_1.default)(userData);
+    poolConnectionDB.getConnection((err, connection) => {
+        if (err)
+            console.log(err);
+        connection.query(`INSERT INTO users(id, role, tempRole, login, name, surName, email, password, location, occupation, disputesWin, disputesLose, disputesRatio) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`, [
+            id,
+            role,
+            tempRole,
+            login,
+            name,
+            surname,
+            email,
+            password,
+            location,
+            occupation,
+            disputesWin,
+            disputesLose,
+            disputesRatio,
+        ], function (err, results, fields) {
+            if (err)
+                console.log(err);
+            connection.release();
+        });
+    });
+    res.status(200).send("OK");
 });
 // MESSAGES
+// Messages first load
 app.get("/messages/:target", (req, res) => {
     const fetchTarget = req.params.target;
-    res.status(200).json(MESSAGES[fetchTarget]);
+    poolConnectionDB.getConnection((err, connection) => {
+        if (err)
+            console.log(err);
+        connection.query(`SELECT * FROM ${fetchTarget}`, function (err, results, fields) {
+            if (err)
+                console.log(err);
+            res.status(200).json(results);
+            connection.release();
+        });
+    });
 });
+//New message
 app.post("/messages/:target", (req, res) => {
-    const newMessage = req.body;
-    const pushTarget = req.params.target;
-    MESSAGES[pushTarget].push(newMessage);
-    res.status(200).json(MESSAGES[pushTarget]);
+    const [flag, userID, userLogin, messageInput, postfixForId] = req.body;
+    const newMessage = (0, createNewMessage_1.default)(flag, userID, userLogin, messageInput, postfixForId);
+    poolConnectionDB.getConnection((err, connection) => {
+        if (err)
+            console.log(err);
+        connection.query(`INSERT INTO ${flag}(id, dateHh, dateMm, dateFull, user_id, user, message_body, deleted_text, was_deleted, likes) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`, [
+            newMessage.id,
+            newMessage.dateHh,
+            newMessage.dateMm,
+            newMessage.dateFull,
+            newMessage.userID,
+            newMessage.user,
+            newMessage.messageBody,
+            newMessage.deletedText,
+            newMessage.wasDeleted,
+            newMessage.likes,
+        ], function (err, results, fields) {
+            if (err)
+                console.log(err);
+            connection.release();
+        });
+    });
+    // res.status(200).json(MESSAGES[pushTarget as keyof typeof MESSAGES]);
 });
+// Edit message
 app.patch("/messages/:target/:id", (req, res) => {
     const patchTarget = req.params.target;
     const messageId = Number(req.params.id);

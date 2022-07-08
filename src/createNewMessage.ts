@@ -5,20 +5,22 @@ interface NewMessageFactory {
     flag: string,
     userID: string,
     userLogin: string,
-    messageInput: string,
-    postfixForId: number
+    messageInput: string
   ): NewMessage;
 }
 
 interface NewMessage {
   id: string;
-  dateHh: string;
-  dateMm: string;
+  dateHh: number;
+  dateMm: number;
+  dateSs: number;
+  dateMs: number;
   dateFull: string;
   userID: string;
   user: string;
   messageBody: string;
   deletedText: string;
+  isDeleted: boolean;
   wasDeleted: boolean;
   likes: number | null;
 }
@@ -30,23 +32,23 @@ const createNewMessage: NewMessageFactory = (
   messageInput
 ) => {
   const date: Date = new Date();
-  function dateTransform(dateValue: number): string {
-    return ((dateValue < 10 ? "0" : "") + dateValue).toString();
-  }
   let newMessage: NewMessage = {
     id: uuidv4(),
-    dateHh: dateTransform(date.getHours()),
-    dateMm: dateTransform(date.getMinutes()),
+    dateHh: date.getHours(),
+    dateMm: date.getMinutes(),
+    dateSs: date.getSeconds(),
+    dateMs: date.getMilliseconds(),
     dateFull: date.toString(),
     userID: userID,
     user: userLogin,
     messageBody: messageInput,
     deletedText: "",
+    isDeleted: false,
     wasDeleted: false,
     likes: null,
   };
   // Setting likes only for disputeMessages
-  if (flag.search(/^[d]/) === 0) newMessage.likes = 0;
+  // if (flag.search(/^[d]/) === 0) newMessage.likes = 0;
 
   return newMessage;
 };

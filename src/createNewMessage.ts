@@ -48,7 +48,7 @@ const createNewMessage: NewMessageFactory = (
     likes: null,
   };
   // Setting likes only for disputeMessages
-  // if (flag.search(/^[d]/) === 0) newMessage.likes = 0;
+  if (flag.search(/^[d]/) === 0) newMessage.likes = 0;
 
   return newMessage;
 };

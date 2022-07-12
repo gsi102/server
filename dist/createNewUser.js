@@ -14,10 +14,10 @@ const createNewUser = (userData) => {
         role: mainRoles[1],
         tempRole: tempRoles[3],
         login: userData.login,
-        password: userData.password,
-        name: "",
-        surname: "",
+        firstName: "",
+        lastName: "",
         email: userData.email,
+        password: userData.password,
         location: "",
         occupation: "",
         rating: {

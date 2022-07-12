@@ -15,10 +15,10 @@ interface NewUser {
   role: string;
   tempRole: string;
   login: string;
-  password: string;
-  name: string;
-  surname: string;
+  firstName: string;
+  lastName: string;
   email: string | null;
+  password: string;
   location: string;
   occupation: string;
   rating: Rating;
@@ -43,10 +43,10 @@ const createNewUser: NewUserFactory = (userData) => {
     role: mainRoles[1],
     tempRole: tempRoles[3],
     login: userData.login,
-    password: userData.password,
-    name: "",
-    surname: "",
+    firstName: "",
+    lastName: "",
     email: userData.email,
+    password: userData.password,
     location: "",
     occupation: "",
     rating: {

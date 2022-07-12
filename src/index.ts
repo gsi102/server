@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import mysql from "mysql";
 import createNewUser from "./createNewUser";
 import createNewMessage from "./createNewMessage";
+import { sqlRequests } from "./sqlRequests";
 
 const app = express();
 const port = process.env.PORT ?? 3003;
@@ -26,6 +27,7 @@ const poolConnectionDB = mysql.createPool({
 });
 
 // USERS
+// Sign-in
 app.post("/sign-in", (req, res) => {
   const [userLogin, userPassword] = [req.body.login, req.body.password];
   const compareLogin = userLogin.toString().toLowerCase();
@@ -52,50 +54,41 @@ app.post("/sign-in", (req, res) => {
     );
   });
 });
-
+// Sign-up
 app.post("/sign-up", (req, res) => {
   const userData = req.body;
-  const {
-    id,
-    role,
-    tempRole,
-    login,
-    name,
-    surname,
-    email,
-    password,
-    location,
-    occupation,
-    rating: { disputesWin, disputesLose, disputesRatio },
-  } = createNewUser(userData);
+  const newUser = createNewUser(userData);
+  const sqlColumnNames = [
+    "id",
+    "role",
+    "tempRole",
+    "login",
+    "firstName",
+    "lastName",
+    "email",
+    "password",
+    "location",
+    "occupation",
+    "disputesWin",
+    "disputesLose",
+    "disputesRatio",
+  ];
 
   poolConnectionDB.getConnection((err, connection) => {
     if (err) console.log(err);
     connection.query(
-      `INSERT INTO users(id, role, tempRole, login, name, surName, email, password, location, occupation, disputesWin, disputesLose, disputesRatio) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-      [
-        id,
-        role,
-        tempRole,
-        login,
-        name,
-        surname,
-        email,
-        password,
-        location,
-        occupation,
-        disputesWin,
-        disputesLose,
-        disputesRatio,
-      ],
+      `INSERT INTO users(${sqlColumnNames}) 
+      VALUES 
+      (
+        ${sqlRequests.sqlInsertSynthax(sqlColumnNames)}
+      );`,
+      sqlRequests.sqlColumnValues(newUser),
       function (err, results, fields) {
         if (err) console.log(err);
         connection.release();
       }
     );
   });
-
   res.status(200).send("OK");
 });
 
@@ -123,41 +116,34 @@ app.post("/messages/:target", (req, res) => {
   const { userID, userLogin, messageInput } = req.body;
   const newMessage = createNewMessage(flag, userID, userLogin, messageInput);
 
+  const sqlColumnNames = [
+    "id",
+    "dateHh",
+    "dateMm",
+    "dateSs",
+    "dateMs",
+    "dateFull",
+    "userID",
+    "user",
+    "messageBody",
+    "deletedText",
+    "isDeleted",
+    "wasDeleted",
+    "likes",
+  ];
+
   poolConnectionDB.getConnection((err, connection) => {
     if (err) console.log(err);
-    // create a func for ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     connection.query(
       `INSERT INTO ${flag}
       (
-      id, dateHh, dateMm, 
-      dateSs, dateMs, dateFull, 
-      userID, user, messageBody, 
-      deletedText, isDeleted, wasDeleted, 
-      likes
+        ${sqlColumnNames}
       )
       VALUES 
       (
-        ?, ?, ?, 
-        ?, ?, ?, 
-        ?, ?, ?, 
-        ?, ?, ?, 
-        ?
+        ${sqlRequests.sqlInsertSynthax(sqlColumnNames)}
       );`,
-      [
-        newMessage.id,
-        newMessage.dateHh,
-        newMessage.dateMm,
-        newMessage.dateSs,
-        newMessage.dateMs,
-        newMessage.dateFull,
-        newMessage.userID,
-        newMessage.user,
-        newMessage.messageBody,
-        newMessage.deletedText,
-        newMessage.isDeleted,
-        newMessage.wasDeleted,
-        newMessage.likes,
-      ],
+      sqlRequests.sqlColumnValues(newMessage),
       function (err, results, fields) {
         if (err) console.log(err);
         res.status(200).json(newMessage);
@@ -169,124 +155,46 @@ app.post("/messages/:target", (req, res) => {
 
 // Edit message
 app.patch("/messages/:target/:id", (req, res) => {
-  const patchTarget = req.params.target;
-  const messageID = req.params.id;
-  // const element =
+  const { id, target } = req.params;
+  const textContainer = req.body.textContainer;
+  let sqlRequest = "";
 
-  const updateMessage = function (patchTarget, messageID) {
-    // 1 check if it is deleted and send deleted text
-    // poolConnectionDB.getConnection((err, connection) => {
-    //   if (err) console.log(err);
-    //   connection.query(
-    //     `UPDATE ${patchTarget}
-    //     SET likes = likes + 1
-    //     WHERE id = '${messageID}'`,
-    //     function (err, results, fields) {
-    //       if (err) console.log(err);
-    //       res.status(200).json(results);
-    //       connection.release();
-    //     }
-    //   );
-    // });
-    // 2
-    // poolConnectionDB.getConnection((err, connection) => {
-    //   if (err) console.log(err);
-    //   connection.query(
-    //     `UPDATE ${patchTarget} SET deletedText = "???",
-    //     messageBody = "Message has been deleted by moderator",
-    //     wasDeleted = 1,
-    //     isDeleted = 1
-    //     WHERE id = '${messageID}'`,
-    //     function (err, results, fields) {
-    //       if (err) console.log(err);
-    //       res.status(200).json(results);
-    //       connection.release();
-    //     }
-    //   );
-    // });
-    // 3
-    // poolConnectionDB.getConnection((err, connection) => {
-    //   if (err) console.log(err);
-    //   connection.query(
-    //     `UPDATE ${patchTarget}
-    //     SET messageBody = "Some previous text",
-    //       isDeleted = 0
-    //     WHERE id = '${messageID}'`,
-    //     function (err, results, fields) {
-    //       if (err) console.log(err);
-    //       res.status(200).json(results);
-    //       connection.release();
-    //     }
-    //   );
-    // });
+  const updateMessage = function (sqlRequest: string) {
+    poolConnectionDB.getConnection((err, connection) => {
+      if (err) console.log(err);
+      connection.query(sqlRequest, function (err, results, fields) {
+        if (err) console.log(err);
+        res.status(200).json(results);
+        connection.release();
+      });
+    });
   };
 
   switch (req.body.type) {
     case "delete":
       {
-        // ДОРАБОТАТЬ
-        poolConnectionDB.getConnection((err, connection) => {
-          if (err) console.log(err);
-          connection.query(
-            `UPDATE ${patchTarget} 
-            SET deletedText = "???",
-              messageBody = "Message has been deleted by moderator",
-              wasDeleted = 1,
-              isDeleted = 1
-            WHERE id = '${messageID}'`,
-            function (err, results, fields) {
-              if (err) console.log(err);
-              res.status(200).json(results);
-              connection.release();
-            }
-          );
-        });
-
-        // if (!element.deletedText) element.deletedText = element.text;
-        // if (!element.deleted) {
-        //   element.deleted = !element.deleted;
-        //   element.wasDeleted = true;
-        // }
-        // element.text = "Message has been deleted by moderator";
+        sqlRequest = `UPDATE ${target} 
+        SET deletedText = '${textContainer}',
+          messageBody = "Message has been deleted by moderator",
+          wasDeleted = 1,
+          isDeleted = 1
+        WHERE id = '${id}'`;
+        updateMessage(sqlRequest);
       }
       break;
     case "return":
-      // ДОРАБОТАТЬ
-      poolConnectionDB.getConnection((err, connection) => {
-        if (err) console.log(err);
-        connection.query(
-          `UPDATE ${patchTarget} 
-          SET messageBody = "Some previous text",
-            isDeleted = 0
-          WHERE id = '${messageID}'`,
-          function (err, results, fields) {
-            if (err) console.log(err);
-            res.status(200).json(results);
-            connection.release();
-          }
-        );
-      });
-
-      //   {
-      //     if (element.deletedText) element.text = element.deletedText;
-      //     if (element.deleted) element.deleted = !element.deleted;
-      //   }
+      sqlRequest = `UPDATE ${target} 
+      SET messageBody = '${textContainer}',
+        isDeleted = 0
+      WHERE id = '${id}'`;
+      updateMessage(sqlRequest);
       break;
     case "like":
       {
-        poolConnectionDB.getConnection((err, connection) => {
-          if (err) console.log(err);
-          connection.query(
-            `UPDATE ${patchTarget} 
-            SET likes = likes + 1 
-            WHERE id = '${messageID}'`,
-            function (err, results, fields) {
-              if (err) console.log(err);
-              res.status(200).json(results);
-              connection.release();
-            }
-          );
-        });
+        sqlRequest = `UPDATE ${target} 
+        SET likes = likes + 1 
+        WHERE id = '${id}'`;
+        updateMessage(sqlRequest);
       }
       break;
     default:

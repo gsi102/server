@@ -1,0 +1,23 @@
+interface sqlRequests {
+  sqlInsertSynthax: (arr: Array<string>) => Array<string>;
+  sqlColumnValues: (obj: any) => Array<string>;
+}
+
+export const sqlRequests: sqlRequests = {
+  sqlInsertSynthax: (columnNames) => {
+    const newArray = new Array(columnNames.length);
+    return newArray.fill("?");
+  },
+  sqlColumnValues: (sourceObj) => {
+    const columnValuesArray: Array<any> = [];
+    const digFunction = (obj: any) => {
+      for (let [key] of Object.entries(obj)) {
+        obj[key].constructor === Object
+          ? digFunction(obj[key])
+          : columnValuesArray.push(obj[key]);
+      }
+    };
+    digFunction(sourceObj);
+    return columnValuesArray;
+  },
+};

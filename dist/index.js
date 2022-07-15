@@ -10,6 +10,8 @@ const mysql_1 = __importDefault(require("mysql"));
 const createNewUser_1 = __importDefault(require("./createNewUser"));
 const createNewMessage_1 = __importDefault(require("./createNewMessage"));
 const sqlRequests_1 = require("./sqlRequests");
+const ws_1 = __importDefault(require("ws"));
+const http_1 = __importDefault(require("http"));
 const app = (0, express_1.default)();
 const port = (_a = process.env.PORT) !== null && _a !== void 0 ? _a : 3003;
 app.use(express_1.default.json());
@@ -17,6 +19,7 @@ app.use(express_1.default.json());
 app.use((0, cors_1.default)({ credentials: true, origin: true }));
 // COOKIES
 // app.use(cookieParser());
+// MySQL db
 const poolConnectionDB = mysql_1.default.createPool({
     connectionLimit: 10,
     host: "91.236.136.231",
@@ -24,6 +27,51 @@ const poolConnectionDB = mysql_1.default.createPool({
     password: "admin323",
     database: "u170175_db",
 });
+//WebSocket
+var myServer = http_1.default.createServer(app);
+const wsConnection = new ws_1.default.Server({
+    port: 3008,
+});
+wsConnection.on("connection", (ws) => {
+    ws.on("message", (data) => {
+        const newMessageID = data.toString();
+        const regex = /(.*)\_/;
+        const fetchTarget = regex.exec(newMessageID);
+        poolConnectionDB.getConnection((err, connection) => {
+            if (err)
+                console.log(err);
+            if (fetchTarget)
+                connection.query(`SELECT * FROM ${fetchTarget[1]} WHERE id = '${newMessageID}'`, function (err, results, fields) {
+                    if (err)
+                        console.log(err);
+                    wsConnection.clients.forEach(function each(client) {
+                        client.send(JSON.stringify(results));
+                    });
+                    connection.release();
+                });
+        });
+    });
+});
+// Fetch ALL messages
+// wsConnection.on("connection", (ws) => {
+//   ws.on("message", (data) => {
+//     const fetchTarget = data.toString();
+//     poolConnectionDB.getConnection((err, connection) => {
+//       if (err) console.log(err);
+//       connection.query(
+//         `SELECT * FROM ${fetchTarget} ORDER BY dateHh, dateMm, dateSs, dateMs ASC`,
+//         function (err, results, fields) {
+//           if (err) console.log(err);
+//           wsConnection.clients.forEach(function each(client) {
+//             client.send(JSON.stringify(results));
+//           });
+//           connection.release();
+//         }
+//       );
+//     });
+//   });
+// });
+///////////////////////////////
 // USERS
 // Sign-in
 app.post("/sign-in", (req, res) => {
@@ -76,7 +124,7 @@ app.post("/sign-up", (req, res) => {
       VALUES 
       (
         ${sqlRequests_1.sqlRequests.sqlInsertSynthax(sqlColumnNames)}
-      );`, sqlRequests_1.sqlRequests.sqlColumnValues(newUser), function (err, results, fields) {
+      );`, sqlRequests_1.sqlRequests.sqlUserColumnValues(newUser), function (err, results, fields) {
             if (err)
                 console.log(err);
             connection.release();
@@ -129,7 +177,7 @@ app.post("/messages/:target", (req, res) => {
       VALUES 
       (
         ${sqlRequests_1.sqlRequests.sqlInsertSynthax(sqlColumnNames)}
-      );`, sqlRequests_1.sqlRequests.sqlColumnValues(newMessage), function (err, results, fields) {
+      );`, sqlRequests_1.sqlRequests.sqlMessagesColumnValues(newMessage), function (err, results, fields) {
             if (err)
                 console.log(err);
             res.status(200).json(newMessage);

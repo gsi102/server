@@ -7,6 +7,9 @@ import mysql from "mysql";
 import createNewUser from "./createNewUser";
 import createNewMessage from "./createNewMessage";
 import { sqlRequests } from "./sqlRequests";
+import Websocket from "ws";
+import http from "http";
+import { Blob } from "buffer";
 
 const app = express();
 const port = process.env.PORT ?? 3003;
@@ -18,6 +21,7 @@ app.use(cors({ credentials: true, origin: true }));
 // COOKIES
 // app.use(cookieParser());
 
+// MySQL db
 const poolConnectionDB = mysql.createPool({
   connectionLimit: 10,
   host: "91.236.136.231",
@@ -25,6 +29,56 @@ const poolConnectionDB = mysql.createPool({
   password: "admin323",
   database: "u170175_db",
 });
+
+//WebSocket
+var myServer = http.createServer(app);
+const wsConnection = new Websocket.Server({
+  port: 3008,
+});
+
+wsConnection.on("connection", (ws) => {
+  ws.on("message", (data) => {
+    const newMessageID = data.toString();
+    const regex = /(.*)\_/;
+    const fetchTarget = regex.exec(newMessageID);
+
+    poolConnectionDB.getConnection((err, connection) => {
+      if (err) console.log(err);
+      if (fetchTarget)
+        connection.query(
+          `SELECT * FROM ${fetchTarget[1]} WHERE id = '${newMessageID}'`,
+          function (err, results, fields) {
+            if (err) console.log(err);
+            wsConnection.clients.forEach(function each(client) {
+              client.send(JSON.stringify(results));
+            });
+            connection.release();
+          }
+        );
+    });
+  });
+});
+
+// Fetch ALL messages
+// wsConnection.on("connection", (ws) => {
+//   ws.on("message", (data) => {
+//     const fetchTarget = data.toString();
+//     poolConnectionDB.getConnection((err, connection) => {
+//       if (err) console.log(err);
+//       connection.query(
+//         `SELECT * FROM ${fetchTarget} ORDER BY dateHh, dateMm, dateSs, dateMs ASC`,
+//         function (err, results, fields) {
+//           if (err) console.log(err);
+//           wsConnection.clients.forEach(function each(client) {
+//             client.send(JSON.stringify(results));
+//           });
+//           connection.release();
+//         }
+//       );
+//     });
+//   });
+// });
+///////////////////////////////
 
 // USERS
 // Sign-in
@@ -82,7 +136,7 @@ app.post("/sign-up", (req, res) => {
       (
         ${sqlRequests.sqlInsertSynthax(sqlColumnNames)}
       );`,
-      sqlRequests.sqlColumnValues(newUser),
+      sqlRequests.sqlUserColumnValues(newUser),
       function (err, results, fields) {
         if (err) console.log(err);
         connection.release();
@@ -143,7 +197,7 @@ app.post("/messages/:target", (req, res) => {
       (
         ${sqlRequests.sqlInsertSynthax(sqlColumnNames)}
       );`,
-      sqlRequests.sqlColumnValues(newMessage),
+      sqlRequests.sqlMessagesColumnValues(newMessage),
       function (err, results, fields) {
         if (err) console.log(err);
         res.status(200).json(newMessage);

@@ -33,7 +33,7 @@ const createNewMessage: NewMessageFactory = (
 ) => {
   const date: Date = new Date();
   let newMessage: NewMessage = {
-    id: uuidv4(),
+    id: flag + "_" + uuidv4(),
     dateHh: date.getHours(),
     dateMm: date.getMinutes(),
     dateSs: date.getSeconds(),

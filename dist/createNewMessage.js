@@ -4,7 +4,7 @@ const uuid_1 = require("uuid");
 const createNewMessage = (flag, userID, userLogin, messageInput) => {
     const date = new Date();
     let newMessage = {
-        id: (0, uuid_1.v4)(),
+        id: flag + "_" + (0, uuid_1.v4)(),
         dateHh: date.getHours(),
         dateMm: date.getMinutes(),
         dateSs: date.getSeconds(),

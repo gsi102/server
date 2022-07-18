@@ -6,10 +6,12 @@ import cookieParser from "cookie-parser";
 import mysql from "mysql";
 import createNewUser from "./createNewUser";
 import createNewMessage from "./createNewMessage";
-import { sqlRequests } from "./sqlRequests";
+import { sqlRequestsTemplates } from "./sqlRequests";
 import Websocket from "ws";
 import http from "http";
 import { Blob } from "buffer";
+import HTTP_CODES from "./HTTP_CODES";
+import sqlAPI from "./sqlAPI";
 
 const app = express();
 const port = process.env.PORT ?? 3003;
@@ -30,12 +32,11 @@ const poolConnectionDB = mysql.createPool({
   database: "u170175_db",
 });
 
-//WebSocket
+//WebSocket - send new message to all clients
 var myServer = http.createServer(app);
 const wsConnection = new Websocket.Server({
   port: 3008,
 });
-
 wsConnection.on("connection", (ws) => {
   ws.on("message", (data) => {
     const newMessageID = data.toString();
@@ -58,26 +59,6 @@ wsConnection.on("connection", (ws) => {
     });
   });
 });
-
-// Fetch ALL messages
-// wsConnection.on("connection", (ws) => {
-//   ws.on("message", (data) => {
-//     const fetchTarget = data.toString();
-//     poolConnectionDB.getConnection((err, connection) => {
-//       if (err) console.log(err);
-//       connection.query(
-//         `SELECT * FROM ${fetchTarget} ORDER BY dateHh, dateMm, dateSs, dateMs ASC`,
-//         function (err, results, fields) {
-//           if (err) console.log(err);
-//           wsConnection.clients.forEach(function each(client) {
-//             client.send(JSON.stringify(results));
-//           });
-//           connection.release();
-//         }
-//       );
-//     });
-//   });
-// });
 ///////////////////////////////
 
 // USERS
@@ -85,171 +66,53 @@ wsConnection.on("connection", (ws) => {
 app.post("/sign-in", (req, res) => {
   const [userLogin, userPassword] = [req.body.login, req.body.password];
   const compareLogin = userLogin.toString().toLowerCase();
-
-  poolConnectionDB.getConnection((err, connection) => {
-    if (err) console.log(err);
-    connection.query(
-      `SELECT * FROM users WHERE login = ?`,
-      compareLogin,
-      (err2, response) => {
-        if (err2) console.log(err2);
-        if (response.length === 1) {
-          const compareUser = response[0];
-          const sendUser = { ...compareUser };
-          // Prevent sending password in response
-          delete sendUser.password;
-
-          userPassword === compareUser.password
-            ? res.status(200).send(sendUser)
-            : res.status(401).send(compareUser);
-        } else res.status(401).send("user not found");
-        connection.release();
-      }
-    );
-  });
+  sqlAPI.users.signIn(compareLogin, userPassword, res);
 });
 // Sign-up
 app.post("/sign-up", (req, res) => {
   const userData = req.body;
   const newUser = createNewUser(userData);
-  const sqlColumnNames = [
-    "id",
-    "role",
-    "tempRole",
-    "login",
-    "firstName",
-    "lastName",
-    "email",
-    "password",
-    "location",
-    "occupation",
-    "disputesWin",
-    "disputesLose",
-    "disputesRatio",
-  ];
-
-  poolConnectionDB.getConnection((err, connection) => {
-    if (err) console.log(err);
-    connection.query(
-      `INSERT INTO users(${sqlColumnNames}) 
-      VALUES 
-      (
-        ${sqlRequests.sqlInsertSynthax(sqlColumnNames)}
-      );`,
-      sqlRequests.sqlUserColumnValues(newUser),
-      function (err, results, fields) {
-        if (err) console.log(err);
-        connection.release();
-      }
-    );
-  });
-  res.status(200).send("OK");
+  sqlAPI.users.signUp(newUser, res);
 });
 
 // MESSAGES
-// Fetching messages
+// Fetching ALL messages
 app.get("/messages/:target", (req, res) => {
   const fetchTarget = req.params.target;
-
-  poolConnectionDB.getConnection((err, connection) => {
-    if (err) console.log(err);
-    connection.query(
-      `SELECT * FROM ${fetchTarget} ORDER BY dateHh, dateMm, dateSs, dateMs ASC`,
-      function (err, results, fields) {
-        if (err) console.log(err);
-        res.status(200).json(results);
-        connection.release();
-      }
-    );
-  });
+  sqlAPI.messages.getAllMessages(fetchTarget, res);
 });
-
 //New message
 app.post("/messages/:target", (req, res) => {
   const flag = req.params.target;
   const { userID, userLogin, messageInput } = req.body;
   const newMessage = createNewMessage(flag, userID, userLogin, messageInput);
-
-  const sqlColumnNames = [
-    "id",
-    "dateHh",
-    "dateMm",
-    "dateSs",
-    "dateMs",
-    "dateFull",
-    "userID",
-    "user",
-    "messageBody",
-    "deletedText",
-    "isDeleted",
-    "wasDeleted",
-    "likes",
-  ];
-
-  poolConnectionDB.getConnection((err, connection) => {
-    if (err) console.log(err);
-    connection.query(
-      `INSERT INTO ${flag}
-      (
-        ${sqlColumnNames}
-      )
-      VALUES 
-      (
-        ${sqlRequests.sqlInsertSynthax(sqlColumnNames)}
-      );`,
-      sqlRequests.sqlMessagesColumnValues(newMessage),
-      function (err, results, fields) {
-        if (err) console.log(err);
-        res.status(200).json(newMessage);
-        connection.release();
-      }
-    );
-  });
+  sqlAPI.messages.sendNewMessage(flag, newMessage, res);
 });
 
-// Edit message
+// delete/return/like message
 app.patch("/messages/:target/:id", (req, res) => {
   const { id, target } = req.params;
   const textContainer = req.body.textContainer;
-  let sqlRequest = "";
-
-  const updateMessage = function (sqlRequest: string) {
-    poolConnectionDB.getConnection((err, connection) => {
-      if (err) console.log(err);
-      connection.query(sqlRequest, function (err, results, fields) {
-        if (err) console.log(err);
-        res.status(200).json(results);
-        connection.release();
-      });
-    });
-  };
 
   switch (req.body.type) {
     case "delete":
-      {
-        sqlRequest = `UPDATE ${target} 
-        SET deletedText = '${textContainer}',
-          messageBody = "Message has been deleted by moderator",
-          wasDeleted = 1,
-          isDeleted = 1
-        WHERE id = '${id}'`;
-        updateMessage(sqlRequest);
-      }
+      sqlAPI.messages.updateMessageMethods.deleteMessage(
+        id,
+        target,
+        textContainer,
+        res
+      );
       break;
     case "return":
-      sqlRequest = `UPDATE ${target} 
-      SET messageBody = '${textContainer}',
-        isDeleted = 0
-      WHERE id = '${id}'`;
-      updateMessage(sqlRequest);
+      sqlAPI.messages.updateMessageMethods.returnMessage(
+        id,
+        target,
+        textContainer,
+        res
+      );
       break;
     case "like":
-      {
-        sqlRequest = `UPDATE ${target} 
-        SET likes = likes + 1 
-        WHERE id = '${id}'`;
-        updateMessage(sqlRequest);
-      }
+      sqlAPI.messages.updateMessageMethods.likeMessage(id, target, res);
       break;
     default:
     //will never execute

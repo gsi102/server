@@ -1,34 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
+import * as Types from "./types/types";
 
-interface UserData {
-  login: string;
-  password: string;
-  email: string | null;
-}
-
-interface NewUserFactory {
-  (val: UserData): NewUser;
-}
-
-interface NewUser {
-  id: string;
-  role: string;
-  tempRole: string;
-  login: string;
-  firstName: string;
-  lastName: string;
-  email: string | null;
-  password: string;
-  location: string;
-  occupation: string;
-  rating: Rating;
-}
-
-interface Rating {
-  disputesWin: number;
-  disputesLose: number;
-  disputesRatio: number;
-}
 const mainRoles: Array<string> = ["admin", "user"];
 const tempRoles: Array<string> = [
   "admin",
@@ -37,8 +9,8 @@ const tempRoles: Array<string> = [
   "spectator",
 ];
 
-const createNewUser: NewUserFactory = (userData) => {
-  const newUser: NewUser = {
+const createNewUser: Types.NewUserFactory = (userData) => {
+  const newUser: Types.NewUser = {
     id: uuidv4(),
     role: mainRoles[1],
     tempRole: tempRoles[3],

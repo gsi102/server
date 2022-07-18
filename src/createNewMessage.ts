@@ -1,44 +1,19 @@
 import { v4 as uuidv4 } from "uuid";
+import * as Types from "./types/types";
 
-interface NewMessageFactory {
-  (
-    flag: string,
-    userID: string,
-    userLogin: string,
-    messageInput: string
-  ): NewMessage;
-}
-
-interface NewMessage {
-  id: string;
-  dateHh: number;
-  dateMm: number;
-  dateSs: number;
-  dateMs: number;
-  dateFull: string;
-  userID: string;
-  user: string;
-  messageBody: string;
-  deletedText: string;
-  isDeleted: boolean;
-  wasDeleted: boolean;
-  likes: number | null;
-}
-
-const createNewMessage: NewMessageFactory = (
+const createNewMessage: Types.NewMessageFactory = (
   flag,
   userID,
   userLogin,
   messageInput
 ) => {
   const date: Date = new Date();
-  let newMessage: NewMessage = {
+  let newMessage: Types.NewMessage = {
     id: flag + "_" + uuidv4(),
     dateHh: date.getHours(),
     dateMm: date.getMinutes(),
     dateSs: date.getSeconds(),
-    dateMs: date.getMilliseconds(),
-    dateFull: date.toString(),
+    dateFull: +date,
     userID: userID,
     user: userLogin,
     messageBody: messageInput,

@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sqlRequestsTemplates = void 0;
-exports.sqlRequestsTemplates = {
+exports.sqlColumnsTemplates = void 0;
+exports.sqlColumnsTemplates = {
     sqlInsertSynthax: (columnNames) => {
         const newArray = new Array(columnNames.length);
         return newArray.fill("?");

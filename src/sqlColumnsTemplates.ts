@@ -1,10 +1,6 @@
-interface sqlRequests {
-  sqlInsertSynthax: (arr: Array<string>) => Array<string>;
-  sqlUserColumnValues: (obj: any) => Array<string>;
-  sqlMessagesColumnValues: (obj: any) => Array<string>;
-}
+import * as Types from "./types/types";
 
-export const sqlRequests: sqlRequests = {
+export const sqlColumnsTemplates: Types.sqlRequestsTemplates = {
   sqlInsertSynthax: (columnNames) => {
     const newArray = new Array(columnNames.length);
     return newArray.fill("?");

@@ -6,12 +6,11 @@ var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-const mysql_1 = __importDefault(require("mysql"));
-const createNewUser_1 = __importDefault(require("./createNewUser"));
 const createNewMessage_1 = __importDefault(require("./createNewMessage"));
 const ws_1 = __importDefault(require("ws"));
 const http_1 = __importDefault(require("http"));
 const sqlAPI_1 = __importDefault(require("./sqlAPI"));
+const poolConnectionDB_1 = __importDefault(require("./poolConnectionDB"));
 const app = (0, express_1.default)();
 const port = (_a = process.env.PORT) !== null && _a !== void 0 ? _a : 3003;
 app.use(express_1.default.json());
@@ -19,40 +18,29 @@ app.use(express_1.default.json());
 app.use((0, cors_1.default)({ credentials: true, origin: true }));
 // COOKIES
 // app.use(cookieParser());
-// MySQL db
-const poolConnectionDB = mysql_1.default.createPool({
-    connectionLimit: 10,
-    host: "91.236.136.231",
-    user: "u170175_admin",
-    password: "admin323",
-    database: "u170175_db",
-});
-//WebSocket - send new message to all clients
+//WebSocket - send new/updated message to all clients
 var myServer = http_1.default.createServer(app);
 const wsConnection = new ws_1.default.Server({
     port: 3008,
 });
 wsConnection.on("connection", (ws) => {
-    ws.on("message", (data) => {
-        const newMessageID = data.toString();
+    ws.on("message", (payload) => {
+        // Because of blob
+        let wsPayload = JSON.parse(payload.toString());
+        const messageID = wsPayload.id;
         const regex = /(.*)\_/;
-        const fetchTarget = regex.exec(newMessageID);
-        poolConnectionDB.getConnection((err, connection) => {
-            if (err)
-                console.log(err);
-            if (fetchTarget)
-                connection.query(`SELECT * FROM ${fetchTarget[1]} WHERE id = '${newMessageID}'`, function (err, results, fields) {
-                    if (err)
-                        console.log(err);
-                    wsConnection.clients.forEach(function each(client) {
-                        client.send(JSON.stringify(results));
-                    });
-                    connection.release();
-                });
-        });
+        const fetchTarget = regex.exec(messageID);
+        const sqlString = `SELECT * FROM ${fetchTarget[1]} 
+    WHERE id = '${messageID}'`;
+        const sendToAllClients = (results, errDB) => {
+            results[0].type = wsPayload.type;
+            wsConnection.clients.forEach(function each(client) {
+                client.send(JSON.stringify(results));
+            });
+        };
+        (0, poolConnectionDB_1.default)(sqlString, null, sendToAllClients);
     });
 });
-///////////////////////////////
 // USERS
 // Sign-in
 app.post("/sign-in", (req, res) => {
@@ -63,8 +51,11 @@ app.post("/sign-in", (req, res) => {
 // Sign-up
 app.post("/sign-up", (req, res) => {
     const userData = req.body;
-    const newUser = (0, createNewUser_1.default)(userData);
-    sqlAPI_1.default.users.signUp(newUser, res);
+    sqlAPI_1.default.users.checkLogin(userData, res);
+});
+app.get("/users/:login", (req, res) => {
+    const searchByLogin = req.params.login;
+    sqlAPI_1.default.users.searchUsers(searchByLogin, res);
 });
 // MESSAGES
 // Fetching ALL messages
@@ -81,9 +72,9 @@ app.post("/messages/:target", (req, res) => {
 });
 // delete/return/like message
 app.patch("/messages/:target/:id", (req, res) => {
-    const { id, target } = req.params;
-    const textContainer = req.body.textContainer;
-    switch (req.body.type) {
+    const { target, id } = req.params;
+    const { user, textContainer, type } = req.body;
+    switch (type) {
         case "delete":
             sqlAPI_1.default.messages.updateMessageMethods.deleteMessage(id, target, textContainer, res);
             break;
@@ -91,7 +82,7 @@ app.patch("/messages/:target/:id", (req, res) => {
             sqlAPI_1.default.messages.updateMessageMethods.returnMessage(id, target, textContainer, res);
             break;
         case "like":
-            sqlAPI_1.default.messages.updateMessageMethods.likeMessage(id, target, res);
+            sqlAPI_1.default.messages.updateMessageMethods.likeMessage(id, user, target, res);
             break;
         default:
         //will never execute

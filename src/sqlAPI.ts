@@ -2,6 +2,8 @@ import HTTP_CODES from "./HTTP_CODES";
 import { sqlColumnsTemplates } from "./sqlColumnsTemplates";
 import * as Types from "./types/types";
 import poolConnectionDB from "./poolConnectionDB";
+import { v4 as uuidv4 } from "uuid";
+import createNewUser from "./createNewUser";
 
 const sqlAPI = {
   users: {
@@ -24,6 +26,27 @@ const sqlAPI = {
             .json("Something wrong. Possibly user not found");
       };
       poolConnectionDB(sqlRequest, compareLogin, getUserFromDB);
+    },
+    checkLogin(userData: any, responseToClient: any) {
+      const sqlRequest = `SELECT * FROM users WHERE login = '${userData.login}'`;
+      const compareLogin = (response: any, errDB: any) => {
+        if (errDB) {
+          console.log(errDB);
+          responseToClient
+            .status(HTTP_CODES.BAD_REQUEST_400)
+            .json("Something wrong. Resp from DB: " + errDB);
+        } else {
+          if (response[0]) {
+            responseToClient
+              .status(HTTP_CODES.CONFLICT_409)
+              .json("Login is already exist");
+          } else {
+            const newUser = createNewUser(userData);
+            this.signUp(newUser, responseToClient);
+          }
+        }
+      };
+      poolConnectionDB(sqlRequest, null, compareLogin);
     },
     signUp(newUser: any, responseToClient: any) {
       const sqlColumnNames = [
@@ -59,6 +82,20 @@ const sqlAPI = {
       };
       poolConnectionDB(sqlRequest, sqlOptions, sendNewUserToDB);
     },
+    searchUsers(searchByLogin: string, responseToClient: any) {
+      const sqlRequest = `SELECT * FROM users WHERE login LIKE '%${searchByLogin}%'`;
+      const fetchUsers = (response: any, errDB: any) => {
+        if (errDB) {
+          console.log(errDB);
+          responseToClient
+            .status(HTTP_CODES.BAD_REQUEST_400)
+            .json("Something wrong. Resp from DB: " + errDB);
+        } else {
+          responseToClient.json(response);
+        }
+      };
+      poolConnectionDB(sqlRequest, null, fetchUsers);
+    },
   },
   messages: {
     getAllMessages(fetchTarget: string, responseToClient: any) {
@@ -72,7 +109,7 @@ const sqlAPI = {
             .status(HTTP_CODES.BAD_REQUEST_400)
             .json("Something wrong. Resp from DB: " + errDB);
         } else {
-          responseToClient.status(HTTP_CODES.OK_200).json(response);
+          responseToClient.json(response);
         }
       };
       poolConnectionDB(sqlRequest, null, fetchMessages);
@@ -110,7 +147,7 @@ const sqlAPI = {
             .status(HTTP_CODES.BAD_REQUEST_400)
             .json("Something wrong. Resp from DB: " + errDB);
         } else {
-          responseToClient.status(HTTP_CODES.OK_200).json(newMessage);
+          responseToClient.json(newMessage);
         }
       };
       poolConnectionDB(sqlRequest, sqlOptions, sendNewMessageToDB);
@@ -125,7 +162,7 @@ const sqlAPI = {
               .status(HTTP_CODES.BAD_REQUEST_400)
               .json("Something wrong. Resp from DB: " + errDB);
           } else {
-            responseToClient.status(HTTP_CODES.OK_200).json(response);
+            responseToClient.json(response);
           }
         };
         poolConnectionDB(sqlRequest, null, updateFunc);
@@ -156,11 +193,45 @@ const sqlAPI = {
         WHERE id = '${id}'`;
         this.updateMessage(sqlRequest, responseToClient);
       },
-      likeMessage(id: string, target: string, responseToClient: any) {
-        const sqlRequest = `UPDATE ${target} 
-        SET likes = likes + 1 
-        WHERE id = '${id}'`;
-        this.updateMessage(sqlRequest, responseToClient);
+      likeMessage(
+        id: string,
+        user: string,
+        target: string,
+        responseToClient: any
+      ) {
+        const sqlRequest_checkIfLiked = `SELECT * FROM likes
+        WHERE messageID = '${id}' AND userLogin = '${user}'`;
+        poolConnectionDB(sqlRequest_checkIfLiked, null, (resp: any) => {
+          if (!resp[0]) {
+            const sqlRequest_updateLikes = `INSERT INTO likes(id, messageID, userLogin)
+            VALUES('${uuidv4()}', '${id}', '${user}')`;
+            poolConnectionDB(
+              sqlRequest_updateLikes,
+              null,
+              (response: any, errDB: any) => {
+                // response handler
+              }
+            );
+            const sqlRequest_updateMessage = `UPDATE ${target}
+            SET likes = likes + 1
+            WHERE id = '${id}'`;
+            this.updateMessage(sqlRequest_updateMessage, responseToClient);
+          } else {
+            const sqlRequest_updateLikes = `DELETE FROM likes
+            WHERE messageID = '${id}' AND userLogin = '${user}'`;
+            poolConnectionDB(
+              sqlRequest_updateLikes,
+              null,
+              (response: any, errDB: any) => {
+                // response handler
+              }
+            );
+            const sqlRequest_updateMessage = `UPDATE ${target}
+            SET likes = likes - 1
+            WHERE id = '${id}'`;
+            this.updateMessage(sqlRequest_updateMessage, responseToClient);
+          }
+        });
       },
     },
   },

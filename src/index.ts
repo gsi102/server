@@ -6,12 +6,10 @@ import cookieParser from "cookie-parser";
 import mysql from "mysql";
 import createNewUser from "./createNewUser";
 import createNewMessage from "./createNewMessage";
-import { sqlRequestsTemplates } from "./sqlRequests";
 import Websocket from "ws";
 import http from "http";
-import { Blob } from "buffer";
-import HTTP_CODES from "./HTTP_CODES";
 import sqlAPI from "./sqlAPI";
+import poolConnectionDB from "./poolConnectionDB";
 
 const app = express();
 const port = process.env.PORT ?? 3003;
@@ -23,43 +21,31 @@ app.use(cors({ credentials: true, origin: true }));
 // COOKIES
 // app.use(cookieParser());
 
-// MySQL db
-const poolConnectionDB = mysql.createPool({
-  connectionLimit: 10,
-  host: "91.236.136.231",
-  user: "u170175_admin",
-  password: "admin323",
-  database: "u170175_db",
-});
-
-//WebSocket - send new message to all clients
+//WebSocket - send new/updated message to all clients
 var myServer = http.createServer(app);
 const wsConnection = new Websocket.Server({
   port: 3008,
 });
 wsConnection.on("connection", (ws) => {
-  ws.on("message", (data) => {
-    const newMessageID = data.toString();
-    const regex = /(.*)\_/;
-    const fetchTarget = regex.exec(newMessageID);
+  ws.on("message", (payload) => {
+    // Because of blob
+    let wsPayload: any = JSON.parse(payload.toString());
 
-    poolConnectionDB.getConnection((err, connection) => {
-      if (err) console.log(err);
-      if (fetchTarget)
-        connection.query(
-          `SELECT * FROM ${fetchTarget[1]} WHERE id = '${newMessageID}'`,
-          function (err, results, fields) {
-            if (err) console.log(err);
-            wsConnection.clients.forEach(function each(client) {
-              client.send(JSON.stringify(results));
-            });
-            connection.release();
-          }
-        );
-    });
+    const messageID = wsPayload.id;
+    const regex = /(.*)\_/;
+    const fetchTarget: any = regex.exec(messageID);
+
+    const sqlString = `SELECT * FROM ${fetchTarget[1]} 
+    WHERE id = '${messageID}'`;
+    const sendToAllClients = (results: any, errDB: any) => {
+      results[0].type = wsPayload.type;
+      wsConnection.clients.forEach(function each(client) {
+        client.send(JSON.stringify(results));
+      });
+    };
+    poolConnectionDB(sqlString, null, sendToAllClients);
   });
 });
-///////////////////////////////
 
 // USERS
 // Sign-in
@@ -71,8 +57,11 @@ app.post("/sign-in", (req, res) => {
 // Sign-up
 app.post("/sign-up", (req, res) => {
   const userData = req.body;
-  const newUser = createNewUser(userData);
-  sqlAPI.users.signUp(newUser, res);
+  sqlAPI.users.checkLogin(userData, res);
+});
+app.get("/users/:login", (req, res) => {
+  const searchByLogin = req.params.login;
+  sqlAPI.users.searchUsers(searchByLogin, res);
 });
 
 // MESSAGES
@@ -91,10 +80,10 @@ app.post("/messages/:target", (req, res) => {
 
 // delete/return/like message
 app.patch("/messages/:target/:id", (req, res) => {
-  const { id, target } = req.params;
-  const textContainer = req.body.textContainer;
+  const { target, id } = req.params;
+  const { user, textContainer, type } = req.body;
 
-  switch (req.body.type) {
+  switch (type) {
     case "delete":
       sqlAPI.messages.updateMessageMethods.deleteMessage(
         id,
@@ -112,7 +101,7 @@ app.patch("/messages/:target/:id", (req, res) => {
       );
       break;
     case "like":
-      sqlAPI.messages.updateMessageMethods.likeMessage(id, target, res);
+      sqlAPI.messages.updateMessageMethods.likeMessage(id, user, target, res);
       break;
     default:
     //will never execute

@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const HTTP_CODES_1 = __importDefault(require("./HTTP_CODES"));
 const sqlColumnsTemplates_1 = require("./sqlColumnsTemplates");
 const poolConnectionDB_1 = __importDefault(require("./poolConnectionDB"));
+const uuid_1 = require("uuid");
+const createNewUser_1 = __importDefault(require("./createNewUser"));
 const sqlAPI = {
     users: {
         signIn(compareLogin, userPassword, responseToClient) {
@@ -28,6 +30,29 @@ const sqlAPI = {
                         .json("Something wrong. Possibly user not found");
             };
             (0, poolConnectionDB_1.default)(sqlRequest, compareLogin, getUserFromDB);
+        },
+        checkLogin(userData, responseToClient) {
+            const sqlRequest = `SELECT * FROM users WHERE login = '${userData.login}'`;
+            const compareLogin = (response, errDB) => {
+                if (errDB) {
+                    console.log(errDB);
+                    responseToClient
+                        .status(HTTP_CODES_1.default.BAD_REQUEST_400)
+                        .json("Something wrong. Resp from DB: " + errDB);
+                }
+                else {
+                    if (response[0]) {
+                        responseToClient
+                            .status(HTTP_CODES_1.default.CONFLICT_409)
+                            .json("Login is already exist");
+                    }
+                    else {
+                        const newUser = (0, createNewUser_1.default)(userData);
+                        this.signUp(newUser, responseToClient);
+                    }
+                }
+            };
+            (0, poolConnectionDB_1.default)(sqlRequest, null, compareLogin);
         },
         signUp(newUser, responseToClient) {
             const sqlColumnNames = [
@@ -64,6 +89,21 @@ const sqlAPI = {
             };
             (0, poolConnectionDB_1.default)(sqlRequest, sqlOptions, sendNewUserToDB);
         },
+        searchUsers(searchByLogin, responseToClient) {
+            const sqlRequest = `SELECT * FROM users WHERE login LIKE '%${searchByLogin}%'`;
+            const fetchUsers = (response, errDB) => {
+                if (errDB) {
+                    console.log(errDB);
+                    responseToClient
+                        .status(HTTP_CODES_1.default.BAD_REQUEST_400)
+                        .json("Something wrong. Resp from DB: " + errDB);
+                }
+                else {
+                    responseToClient.json(response);
+                }
+            };
+            (0, poolConnectionDB_1.default)(sqlRequest, null, fetchUsers);
+        },
     },
     messages: {
         getAllMessages(fetchTarget, responseToClient) {
@@ -78,7 +118,7 @@ const sqlAPI = {
                         .json("Something wrong. Resp from DB: " + errDB);
                 }
                 else {
-                    responseToClient.status(HTTP_CODES_1.default.OK_200).json(response);
+                    responseToClient.json(response);
                 }
             };
             (0, poolConnectionDB_1.default)(sqlRequest, null, fetchMessages);
@@ -112,7 +152,7 @@ const sqlAPI = {
                         .json("Something wrong. Resp from DB: " + errDB);
                 }
                 else {
-                    responseToClient.status(HTTP_CODES_1.default.OK_200).json(newMessage);
+                    responseToClient.json(newMessage);
                 }
             };
             (0, poolConnectionDB_1.default)(sqlRequest, sqlOptions, sendNewMessageToDB);
@@ -128,7 +168,7 @@ const sqlAPI = {
                             .json("Something wrong. Resp from DB: " + errDB);
                     }
                     else {
-                        responseToClient.status(HTTP_CODES_1.default.OK_200).json(response);
+                        responseToClient.json(response);
                     }
                 };
                 (0, poolConnectionDB_1.default)(sqlRequest, null, updateFunc);
@@ -149,11 +189,33 @@ const sqlAPI = {
         WHERE id = '${id}'`;
                 this.updateMessage(sqlRequest, responseToClient);
             },
-            likeMessage(id, target, responseToClient) {
-                const sqlRequest = `UPDATE ${target} 
-        SET likes = likes + 1 
-        WHERE id = '${id}'`;
-                this.updateMessage(sqlRequest, responseToClient);
+            likeMessage(id, user, target, responseToClient) {
+                const sqlRequest_checkIfLiked = `SELECT * FROM likes
+        WHERE messageID = '${id}' AND userLogin = '${user}'`;
+                (0, poolConnectionDB_1.default)(sqlRequest_checkIfLiked, null, (resp) => {
+                    if (!resp[0]) {
+                        const sqlRequest_updateLikes = `INSERT INTO likes(id, messageID, userLogin)
+            VALUES('${(0, uuid_1.v4)()}', '${id}', '${user}')`;
+                        (0, poolConnectionDB_1.default)(sqlRequest_updateLikes, null, (response, errDB) => {
+                            // response handler
+                        });
+                        const sqlRequest_updateMessage = `UPDATE ${target}
+            SET likes = likes + 1
+            WHERE id = '${id}'`;
+                        this.updateMessage(sqlRequest_updateMessage, responseToClient);
+                    }
+                    else {
+                        const sqlRequest_updateLikes = `DELETE FROM likes
+            WHERE messageID = '${id}' AND userLogin = '${user}'`;
+                        (0, poolConnectionDB_1.default)(sqlRequest_updateLikes, null, (response, errDB) => {
+                            // response handler
+                        });
+                        const sqlRequest_updateMessage = `UPDATE ${target}
+            SET likes = likes - 1
+            WHERE id = '${id}'`;
+                        this.updateMessage(sqlRequest_updateMessage, responseToClient);
+                    }
+                });
             },
         },
     },
